@@ -1,12 +1,10 @@
+import logging
 import os
 import time
-import logging
 from http import HTTPStatus
+
 import requests
 import telegram
-
-from telegram.ext import Updater
-
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -51,7 +49,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(current_timestamp):
-    """запрос к единственному эндпоинту API-сервиса."""
+    """Запрос к единственному эндпоинту API-сервиса."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     logging.info('Попытка соединения до эндпоинта')
@@ -67,7 +65,8 @@ def get_api_answer(current_timestamp):
         logger.error('Jason не получен')
 
 
-def check_response(response) -> dict:
+def check_response(response):
+    """Проверка ответ API на корректность."""
     if response['homeworks'] is None:
         raise TypeError('response имеет не правильное значение'
                         )
@@ -80,6 +79,7 @@ def check_response(response) -> dict:
 
 
 def parse_status(homework):
+    """Извлечение статуса домашней работы."""
     if 'homework_name' not in homework:
         raise KeyError('homework_name отсутствует в homework')
     if 'status' not in homework:
@@ -91,6 +91,7 @@ def parse_status(homework):
 
 
 def check_tokens():
+    """Проверка доступности переменных окружения."""
     if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
         return True
 
@@ -98,17 +99,18 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time()) - 86400 * 30
+    current_timestamp = int(time.time())
     if not check_tokens():
         logger.critical('Отсутствуют одна или несколько переменных окружения')
         raise Exception('Отсутствуют одна или несколько переменных окружения')
 
     while True:
         try:
+            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text='Поверка связи')
             response = get_api_answer(current_timestamp)
             current_timestamp = response.get('current_date')
             message = parse_status(check_response(response))
-            send_message(bot, message)
+            bot.send_message(bot, message)
             time.sleep(RETRY_TIME)
 
         except Exception as error:
