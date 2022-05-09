@@ -1,11 +1,15 @@
 import logging
 import os
+import sys
 import time
 from http import HTTPStatus
 
 import requests
 import telegram
 from dotenv import load_dotenv
+
+from exceptions import (DictKeyError, KeyErrorStatus, ListHomeworkNull,
+                        TypeErrorHTTPStatus)
 
 load_dotenv()
 
@@ -20,9 +24,10 @@ logger.addHandler(
     logging.StreamHandler()
 )
 
+
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+TELEGRAM_CHAT_ID = 1101252719
 
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
@@ -42,7 +47,7 @@ def send_message(bot, message):
         logger.info(
             f'Сообщение в TG {message}  отправленно'
         )
-    except Exception:
+    except telegram.error.TelegramError:
         logger.error(
             f'Сообщение {message} не отправленно'
         )
@@ -53,29 +58,38 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     logging.info('Попытка соединения до эндпоинта')
-    homework_statuses = requests.get(
-        ENDPOINT, headers=HEADERS, params=params)
     try:
-        if homework_statuses.status_code != HTTPStatus.OK:
-            logging.info('Проверка статуса')
-            return homework_statuses.status_code.json()
-        elif homework_statuses is not None:
-            return (homework_statuses.json())
+        homework_statuses = requests.get(
+            ENDPOINT, headers=HEADERS, params=params)
+    except telegram.error.NetworkError:
+        logger.error('Проблемы с интернетом')
+    try:
+        misstake = (f'Проблема с соединением с сервером'
+                    f'Ошибка {homework_statuses.status_code}')
+        if homework_statuses.status_code == HTTPStatus.OK:
+            return homework_statuses.json()
+        elif homework_statuses.status_code != HTTPStatus.OK:
+            logging.error(misstake)
+            raise TypeErrorHTTPStatus(misstake)
     except ValueError:
-        logger.error('Jason не получен')
+        logger.error('Json не получен')
 
 
 def check_response(response):
     """Проверка ответ API на корректность."""
-    if response['homeworks'] is None:
-        raise TypeError('response имеет не правильное значение'
-                        )
-    if response['homeworks'] == []:
-        return {}
-    status = response['homeworks'][0].get('status')
-    if status not in HOMEWORK_STATUSES:
-        return response['homeworks'][0]
-    return (response['homeworks'])
+    if type(response) is not dict:
+        raise TypeError('Ответ API отличен от словаря')
+    try:
+        list_works = response['homeworks']
+    except KeyError:
+        logger.error('Ошибка словаря по ключу homeworks')
+        raise DictKeyError('Ошибка словаря по ключу homeworks')
+    try:
+        homework = list_works[0]
+    except IndexError:
+        logger.error('Список домашних работ пуст')
+        raise ListHomeworkNull('Список домашних работ пуст')
+    return homework
 
 
 def parse_status(homework):
@@ -83,7 +97,7 @@ def parse_status(homework):
     if 'homework_name' not in homework:
         raise KeyError('homework_name отсутствует в homework')
     if 'status' not in homework:
-        raise Exception('Отсутствует ключ "status" в ответе API')
+        raise KeyErrorStatus('Отсутствует ключ "status" в ответе API')
     homework_name = homework['homework_name']
     homework_status = homework.get('status')
     verdict = HOMEWORK_STATUSES[homework_status]
@@ -92,8 +106,17 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверка доступности переменных окружения."""
-    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-        return True
+    tok_bool = True
+    if PRACTICUM_TOKEN is None:
+        tok_bool = False
+        logger.critical(f'Токен {PRACTICUM_TOKEN} не найден')
+    if TELEGRAM_TOKEN is None:
+        tok_bool = False
+        logger.critical(f'Токен {TELEGRAM_TOKEN} не найден')
+    if TELEGRAM_CHAT_ID is None:
+        tok_bool = False
+        logger.critical(f'Чат {TELEGRAM_CHAT_ID} не найден')
+    return tok_bool
 
 
 def main():
@@ -102,23 +125,23 @@ def main():
     current_timestamp = int(time.time())
     if not check_tokens():
         logger.critical('Отсутствуют одна или несколько переменных окружения')
-        raise Exception('Отсутствуют одна или несколько переменных окружения')
+        sys.exit()
 
     while True:
         try:
-            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text='Поверка связи')
             response = get_api_answer(current_timestamp)
             current_timestamp = response.get('current_date')
             message = parse_status(check_response(response))
-            bot.send_message(bot, message)
-            time.sleep(RETRY_TIME)
+            send_message(bot, message)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
+            logger.error(message)
             current_timestamp = int(time.time())
             time.sleep(RETRY_TIME)
         else:
-            logger.error('Все сломалось')
+            logger.debug('Нет новых статусов')
+            time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
