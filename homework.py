@@ -89,7 +89,7 @@ def check_response(response):
         raise DictKeyError('Ошибка словаря по ключу homeworks')
     try:
         homework = list_works[0]
-    except Error:
+    except Exception:
         logger.info('Список работ пуст')
     return homework
 
