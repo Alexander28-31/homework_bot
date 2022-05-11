@@ -10,13 +10,13 @@ class DictKeyError(Exception):
     pass
 
 
-class ListHomeworkNull(Exception):
-    """Исключение нулевой список домашних работ."""
+class KeyErrorStatus(Exception):
+    """Исключение отсутсвия ключа в статусе."""
 
     pass
 
 
-class KeyErrorStatus(Exception):
-    """Исключение отсутсвия ключа в статусе."""
+class NetError(Exception):
+    """Исключене отуствия нтернета."""
 
     pass
