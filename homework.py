@@ -66,7 +66,7 @@ def get_api_answer(current_timestamp):
         logger.error(misstake_inet)
         raise NetError(misstake_inet)
     misstake_serv = (f'Проблема с соединением с сервером'
-                f'Ошибка {homework_statuses.status_code}')
+                     f'Ошибка {homework_statuses.status_code}')
     misstake_json = 'Json не получен'
     try:
         if homework_statuses.status_code == HTTPStatus.OK:
