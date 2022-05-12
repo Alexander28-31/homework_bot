@@ -20,3 +20,9 @@ class NetError(Exception):
     """Исключене отуствия нтернета."""
 
     pass
+
+
+class JsonError(Exception):
+    """Исключене отуствия Json."""
+
+    pass

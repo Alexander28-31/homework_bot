@@ -8,7 +8,7 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import (DictKeyError, KeyErrorStatus, NetError,
+from exceptions import (DictKeyError, JsonError, KeyErrorStatus, NetError,
                         TypeErrorHTTPStatus)
 
 load_dotenv()
@@ -58,48 +58,53 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     logging.info('Попытка соединения до эндпоинта')
+    misstake_inet = 'Проблемы с интернетом'
     try:
-        misstake_inet = ('Проблемы с интернетом')
         homework_statuses = requests.get(
             ENDPOINT, headers=HEADERS, params=params)
     except telegram.error.NetworkError:
         logger.error(misstake_inet)
         raise NetError(misstake_inet)
-
+    misstake_serv = (f'Проблема с соединением с сервером'
+                f'Ошибка {homework_statuses.status_code}')
+    misstake_json = 'Json не получен'
     try:
-        misstake = (f'Проблема с соединением с сервером'
-                    f'Ошибка {homework_statuses.status_code}')
         if homework_statuses.status_code == HTTPStatus.OK:
             return homework_statuses.json()
-        else:
-            logging.error(misstake)
-            raise TypeErrorHTTPStatus(misstake)
+        logging.error(misstake_serv)
+        raise TypeErrorHTTPStatus(misstake_serv)
     except ValueError:
-        logger.error('Json не получен')
+        logger.error(misstake_json)
+        raise JsonError(misstake_json)
 
 
 def check_response(response):
     """Проверка ответ API на корректность."""
+    misstake_api = 'Ответ API отличен от словаря'
+    misstake_key = 'Ошибка словаря по ключу homeworks'
+    misstake_list = 'Список работ пуст'
     if type(response) is not dict:
-        raise TypeError('Ответ API отличен от словаря')
+        raise TypeError(misstake_api)
     try:
         list_works = response['homeworks']
     except KeyError:
-        logger.error('Ошибка словаря по ключу homeworks')
+        logger.error(misstake_key)
         raise DictKeyError('Ошибка словаря по ключу homeworks')
     try:
         homework = list_works[0]
     except Exception:
-        logger.info('Список работ пуст')
+        logger.info(misstake_list)
     return homework
 
 
 def parse_status(homework):
     """Извлечение статуса домашней работы."""
+    misstake_homework = 'homework_name отсутствует в homework'
+    misstake_key_status = 'Отсутствует ключ "status" в ответе API'
     if 'homework_name' not in homework:
-        raise KeyError('homework_name отсутствует в homework')
+        raise KeyError(misstake_homework)
     if 'status' not in homework:
-        raise KeyErrorStatus('Отсутствует ключ "status" в ответе API')
+        raise KeyErrorStatus(misstake_key_status)
     homework_name = homework['homework_name']
     homework_status = homework.get('status')
     verdict = HOMEWORK_VERDICTS[homework_status]
@@ -125,8 +130,9 @@ def main():
     """Основная логика работы бота."""
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
+    misstake_critical = 'Отсутствуют одна или несколько переменных окружения'
     if not check_tokens():
-        logger.critical('Отсутствуют одна или несколько переменных окружения')
+        logger.critical(misstake_critical)
         sys.exit()
 
     while True:
